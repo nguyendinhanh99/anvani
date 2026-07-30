@@ -1,4 +1,3 @@
-// app/layout.js
 import { AuthContextProvider } from "@/src/context/AuthContext";
 import "./globals.css";
 
@@ -7,7 +6,11 @@ export const metadata = {
   description: "Dự án học tiếng Đức và tiếng Anh cá nhân",
 };
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ 
+  children 
+}: { 
+  children: React.ReactNode 
+}) {
   return (
     <html lang="vi">
       <body className="antialiased bg-gray-50 text-gray-900">
