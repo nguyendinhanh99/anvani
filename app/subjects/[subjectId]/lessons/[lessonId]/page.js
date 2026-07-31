@@ -23,11 +23,13 @@ export default function LessonDetailPage() {
   const [showAddStructForm, setShowAddStructForm] = useState(false);
   const [showAddReadingForm, setShowAddReadingForm] = useState(false);
 
-  // State thêm từ vựng mới
+  // State thêm từ vựng mới (Thủ công)
   const [newWord, setNewWord] = useState("");
   const [newMeaning, setNewMeaning] = useState("");
-  const [newGender, setNewGender] = useState("der");
+  const [newGender, setNewGender] = useState("n");
+  const [newPhonetic, setNewPhonetic] = useState("");
   const [newExample, setNewExample] = useState("");
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
 
   // State sửa từ vựng
   const [editingVocab, setEditingVocab] = useState(null);
@@ -63,10 +65,10 @@ export default function LessonDetailPage() {
   // State xem nghĩa khi click vào từ đã highlight (Dùng chung)
   const [activeTooltip, setActiveTooltip] = useState(null);
 
-  // State thông báo lỗi nhẹ hoặc trùng lặp
+  // State thông báo nhẹ
   const [toastMessage, setToastMessage] = useState("");
 
-  // State quản lý Modal xác nhận xóa đẹp mắt
+  // State quản lý Modal xác nhận xóa
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: "",
@@ -81,11 +83,12 @@ export default function LessonDetailPage() {
     }
     fetchLessonDetail();
 
-    if (!document.getElementById("tesseract-script")) {
-      const tesseractScript = document.createElement("script");
-      tesseractScript.id = "tesseract-script";
-      tesseractScript.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-      document.head.appendChild(tesseractScript);
+    // Tải thư viện SheetJS (xlsx) để đọc file Excel trực tiếp trên trình duyệt
+    if (!document.getElementById("sheetjs-script")) {
+      const xlsxScript = document.createElement("script");
+      xlsxScript.id = "sheetjs-script";
+      xlsxScript.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      document.head.appendChild(xlsxScript);
     }
 
     if (!document.getElementById("pdfjs-script")) {
@@ -122,22 +125,91 @@ export default function LessonDetailPage() {
     }
   };
 
+  // CẬP NHẬT: Đọc file Excel khớp với cột word, gender (loại từ), phonetic (phiên âm), meaning
+  const handleExcelImport = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!window.XLSX) {
+      alert("Thư viện đọc Excel đang tải, vui lòng thử lại sau vài giây!");
+      return;
+    }
+
+    setIsImportingExcel(true);
+    showToast("📊 Đang đọc dữ liệu từ file Excel...");
+
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = window.XLSX.read(data);
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      const jsonData = window.XLSX.utils.sheet_to_json(worksheet);
+
+      if (!jsonData || jsonData.length === 0) {
+        alert("File Excel trống hoặc không có dữ liệu hợp lệ!");
+        setIsImportingExcel(false);
+        return;
+      }
+
+      const currentVocabs = lesson?.vocabularies || [];
+      const existingWordsLower = new Set(currentVocabs.map(v => v.word ? v.word.trim().toLowerCase() : ""));
+      
+      const newImportedVocabs = [];
+
+      jsonData.forEach((row) => {
+        const wordVal = row.word || row.Word || row.Từ || row.từ || row.Vocabulary || row.vocabulary;
+        const meaningVal = row.meaning || row.Meaning || row.Nghĩa || row.nghĩa || row.Dịch || row.dịch;
+        const genderVal = row.gender || row.Gender || row.Loại_từ || row.loại_từ || row["Loại từ"] || "n";
+        const phoneticVal = row.phonetic || row.Phonetic || row.Phiên_âm || row.phiên_âm || row["Phiên âm"] || "";
+        const exampleVal = row.example || row.Example || row.Ví_dụ || row.ví_dụ || "";
+
+        if (wordVal) {
+          const cleanWord = String(wordVal).trim();
+          if (cleanWord && !existingWordsLower.has(cleanWord.toLowerCase())) {
+            existingWordsLower.add(cleanWord.toLowerCase());
+            newImportedVocabs.push({
+              id: Date.now().toString() + Math.random().toString(36).substring(2, 7),
+              word: cleanWord,
+              meaning: meaningVal ? String(meaningVal).trim() : "",
+              gender: genderVal ? String(genderVal).trim() : "n",
+              phonetic: phoneticVal ? String(phoneticVal).trim() : "",
+              example: exampleVal ? String(exampleVal).trim() : "",
+              status: "Chưa ôn"
+            });
+          }
+        }
+      });
+
+      if (newImportedVocabs.length > 0) {
+        const updatedVocabularies = [...currentVocabs, ...newImportedVocabs];
+        const docRef = doc(db, "subjects", subjectId, "lessons", lessonId);
+        await updateDoc(docRef, { vocabularies: updatedVocabularies });
+
+        setLesson(prev => ({ ...prev, vocabularies: updatedVocabularies }));
+        showToast(`✨ Đã nhập thành công ${newImportedVocabs.length} từ vựng từ file Excel!`);
+      } else {
+        showToast("⚠️ Không tìm thấy từ vựng mới nào hoặc các từ đã tồn tại sẵn trong bài học.");
+      }
+
+    } catch (error) {
+      console.error("Lỗi đọc file Excel:", error);
+      showToast("❌ Không thể đọc file Excel. Vui lòng kiểm tra lại cấu trúc file.");
+    } finally {
+      setIsImportingExcel(false);
+      e.target.value = null;
+    }
+  };
+
   const handleFileUploadForReading = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setIsExtractingFile(true);
-    showToast("🔍 Đang phân tích tệp, vui lòng đợi...");
+    showToast("🔍 Đang phân tích tệp bài đọc...");
 
     try {
-      if (file.type.startsWith("image/")) {
-        if (!window.Tesseract) throw new Error("Thư viện Tesseract chưa sẵn sàng.");
-        const { data: { text } } = await window.Tesseract.recognize(file, 'vie+eng', {
-          logger: m => console.log(m)
-        });
-        setReadingBody(prev => (prev ? prev + "\n\n" + text.trim() : text.trim()));
-        showToast("✨ Trích xuất văn bản từ ảnh thành công!");
-      } else if (file.type === "application/pdf") {
+      if (file.type === "application/pdf") {
         if (!window.pdfjsLib) throw new Error("Thư viện PDF.js chưa sẵn sàng.");
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -153,7 +225,7 @@ export default function LessonDetailPage() {
         setReadingBody(prev => (prev ? prev + "\n\n" + fullText.trim() : fullText.trim()));
         showToast("✨ Trích xuất văn bản từ PDF thành công!");
       } else {
-        alert("Định dạng tệp này chưa được hỗ trợ. Vui lòng chọn File Ảnh (PNG, JPG) hoặc PDF!");
+        alert("Vui lòng chọn File PDF cho bài đọc!");
       }
     } catch (error) {
       console.error("Lỗi trích xuất tệp:", error);
@@ -182,7 +254,8 @@ export default function LessonDetailPage() {
         id: Date.now().toString(),
         word: newWord.trim(),
         meaning: newMeaning.trim(),
-        gender: newGender,
+        gender: newGender.trim(),
+        phonetic: newPhonetic.trim(),
         example: newExample.trim(),
         status: "Chưa ôn"
       };
@@ -194,6 +267,7 @@ export default function LessonDetailPage() {
       setLesson(prev => ({ ...prev, vocabularies: updatedVocabularies }));
       setNewWord("");
       setNewMeaning("");
+      setNewPhonetic("");
       setNewExample("");
       showToast("✨ Đã thêm từ vựng mới thành công!");
     } catch (error) {
@@ -225,7 +299,7 @@ export default function LessonDetailPage() {
     setConfirmModal({
       show: true,
       title: "Xóa từ vựng",
-      message: "Bạn có chắc chắn muốn xóa từ vựng này không? Hành động này không thể hoàn tác.",
+      message: "Bạn có chắc chắn muốn xóa từ vựng này không?",
       onConfirm: () => handleDeleteVocab(vocabId),
     });
   };
@@ -347,17 +421,9 @@ export default function LessonDetailPage() {
         if (item.id === structId) {
           if (type === "example") {
             const currentExs = item.examples || [];
-            if (currentExs.map(e => e.toLowerCase()).includes(val.toLowerCase())) {
-              showToast("⚠️ Ví dụ này đã tồn tại!");
-              return item;
-            }
             return { ...item, examples: [...currentExs, val] };
           } else if (type === "note") {
             const currentNotes = item.notes || [];
-            if (currentNotes.map(n => n.toLowerCase()).includes(val.toLowerCase())) {
-              showToast("⚠️ Ghi chú này đã tồn tại!");
-              return item;
-            }
             return { ...item, notes: [...currentNotes, val] };
           }
         }
@@ -371,22 +437,13 @@ export default function LessonDetailPage() {
       setQuickInlineInput({ structId: null, type: null, value: "" });
       showToast("✨ Thêm thành công!");
     } catch (error) {
-      console.error("Lỗi thêm nhanh trực tiếp:", error);
+      console.error("Lỗi thêm nhanh:", error);
     }
   };
 
   const handleAddReading = async (e) => {
     e.preventDefault();
     if (!readingTitle.trim()) return;
-
-    const trimmedTitle = readingTitle.trim().toLowerCase();
-    const currentReadings = lesson?.readings || [];
-
-    const isDuplicate = currentReadings.some(item => item.title && item.title.trim().toLowerCase() === trimmedTitle);
-    if (isDuplicate) {
-      showToast(`⚠️ Bài đọc "${readingTitle}" đã tồn tại!`);
-      return;
-    }
 
     try {
       const readingItem = {
@@ -398,7 +455,7 @@ export default function LessonDetailPage() {
         createdAt: new Date().toISOString()
       };
 
-      const updatedReadings = [...currentReadings, readingItem];
+      const updatedReadings = [...(lesson?.readings || []), readingItem];
       const docRef = doc(db, "subjects", subjectId, "lessons", lessonId);
       await updateDoc(docRef, { readings: updatedReadings });
 
@@ -605,7 +662,8 @@ export default function LessonDetailPage() {
       word: text,
       meaning: trimmedMeaning,
       color: selectedColor,
-      gender: "none",
+      gender: "n",
+      phonetic: "",
       example: "",
       status: "Chưa ôn"
     };
@@ -641,7 +699,7 @@ export default function LessonDetailPage() {
         }));
         showToast("✨ Đã lưu từ vựng thành công!");
       } catch (error) {
-        console.error("Lỗi lưu từ mới từ bài đọc:", error);
+        console.error("Lỗi lưu từ mới:", error);
       }
     } else if (type === "structure") {
       const updatedStructures = lesson.structures.map((item) => {
@@ -670,7 +728,7 @@ export default function LessonDetailPage() {
         }));
         showToast("✨ Đã lưu từ vựng thành công!");
       } catch (error) {
-        console.error("Lỗi lưu từ mới từ cấu trúc:", error);
+        console.error("Lỗi lưu từ mới:", error);
       }
     }
 
@@ -691,14 +749,12 @@ export default function LessonDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 pb-24 relative selection:bg-indigo-500 selection:text-white" onClick={() => setActiveTooltip(null)}>
-      {/* TOAST THÔNG BÁO NHẸ */}
       {toastMessage && (
         <div className="fixed top-24 right-6 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl text-xs font-bold animate-in fade-in slide-in-from-top-4 duration-200 border border-slate-700/80 flex items-center space-x-2 backdrop-blur-xl">
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* HEADER */}
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/80 shadow-2xl">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div 
@@ -719,7 +775,6 @@ export default function LessonDetailPage() {
         </div>
       </header>
 
-      {/* MODAL XÁC NHẬN XÓA */}
       {confirmModal.show && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-7 max-w-sm w-full shadow-2xl space-y-5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -736,7 +791,6 @@ export default function LessonDetailPage() {
         </div>
       )}
 
-      {/* POPUP SỬA TỪ VỰNG */}
       {editingVocab && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-7 max-w-md w-full shadow-2xl space-y-5" onClick={(e) => e.stopPropagation()}>
@@ -751,14 +805,13 @@ export default function LessonDetailPage() {
                   <input type="text" value={editingVocab.word} onChange={(e) => setEditingVocab({...editingVocab, word: e.target.value})} className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 font-medium text-white focus:outline-none focus:border-indigo-500" />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 mb-1.5">Giống</label>
-                  <select value={editingVocab.gender || "none"} onChange={(e) => setEditingVocab({...editingVocab, gender: e.target.value})} className="w-full rounded-xl bg-slate-950 border border-slate-800 px-2 py-3 font-bold uppercase text-emerald-400 focus:outline-none focus:border-indigo-500">
-                    <option value="der">der</option>
-                    <option value="die">die</option>
-                    <option value="das">das</option>
-                    <option value="none">--</option>
-                  </select>
+                  <label className="block font-bold text-slate-400 mb-1.5">Loại từ</label>
+                  <input type="text" value={editingVocab.gender || "n"} onChange={(e) => setEditingVocab({...editingVocab, gender: e.target.value})} className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-3 font-bold text-emerald-400 focus:outline-none focus:border-indigo-500 text-center" />
                 </div>
+              </div>
+              <div>
+                <label className="block font-bold text-slate-400 mb-1.5">Phiên âm</label>
+                <input type="text" value={editingVocab.phonetic || ""} onChange={(e) => setEditingVocab({...editingVocab, phonetic: e.target.value})} className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 font-medium text-white focus:outline-none focus:border-indigo-500" />
               </div>
               <div>
                 <label className="block font-bold text-slate-400 mb-1.5">Nghĩa tiếng Việt</label>
@@ -777,7 +830,6 @@ export default function LessonDetailPage() {
         </div>
       )}
 
-      {/* POPUP SỬA CẤU TRÚC */}
       {editingStructure && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-7 max-w-xl w-full shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -848,7 +900,6 @@ export default function LessonDetailPage() {
         </div>
       )}
 
-      {/* POPUP SỬA BÀI ĐỌC */}
       {editingReading && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-7 max-w-xl w-full shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -878,7 +929,6 @@ export default function LessonDetailPage() {
         </div>
       )}
 
-      {/* POPUP DỊCH KHI BÔI ĐEN */}
       {selectionPopup && (
         <div style={{ top: `${selectionPopup.top}px`, left: `${selectionPopup.left}px` }} className="absolute z-50 bg-slate-900/95 backdrop-blur-xl text-white p-5 rounded-2xl shadow-2xl w-80 space-y-4 text-xs border border-slate-700 animate-in fade-in" onClick={(e) => e.stopPropagation()}>
           <div className="flex justify-between items-center font-bold border-b border-slate-800 pb-2.5">
@@ -906,7 +956,6 @@ export default function LessonDetailPage() {
         </div>
       )}
 
-      {/* TOOLTIP XEM NGHĨA KHI CLICK VÀO TỪ */}
       {activeTooltip && (
         <div style={{ top: `${activeTooltip.top}px`, left: `${activeTooltip.left}px` }} className="absolute z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-slate-700 text-xs space-y-3 max-w-xs backdrop-blur-xl" onClick={(e) => e.stopPropagation()}>
           <div className="font-extrabold text-sm text-indigo-400 border-b border-slate-800 pb-2.5 flex justify-between items-center">
@@ -921,7 +970,6 @@ export default function LessonDetailPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 pt-10">
-        {/* BANNER THÔNG TIN & TABS */}
         <div className="mb-10 bg-gradient-to-br from-indigo-900/30 via-slate-900 to-slate-900/90 border border-slate-800/80 p-8 rounded-3xl shadow-2xl backdrop-blur-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
           <div className="absolute -right-20 -top-20 w-80 h-80 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -930,7 +978,7 @@ export default function LessonDetailPage() {
               <span>Không gian học tập</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">{lesson?.title}</h1>
-            <p className="text-slate-400 text-xs md:text-sm font-medium mt-1">Hệ thống bài học thông minh & tương tác dịch văn bản tự động.</p>
+            <p className="text-slate-400 text-xs md:text-sm font-medium mt-1">Hệ thống bài học thông minh tích hợp nhập từ vựng qua Excel (Hỗ trợ từ vựng, loại từ & phiên âm).</p>
           </div>
 
           <div className="flex space-x-1.5 bg-slate-950/80 p-1.5 rounded-2xl w-full md:w-auto border border-slate-800 relative z-15">
@@ -940,7 +988,6 @@ export default function LessonDetailPage() {
           </div>
         </div>
 
-        {/* TAB 1: TỪ VỰNG */}
         {activeTab === "vocabulary" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-4 h-fit sticky top-28">
@@ -954,28 +1001,55 @@ export default function LessonDetailPage() {
               {showAddVocabForm && (
                 <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-200">
                   <h3 className="text-base font-bold text-white mb-4 flex items-center space-x-2">
-                    <span>➕</span>
-                    <span>Thêm từ vựng mới</span>
+                    <span>📊</span>
+                    <span>Nhập từ vựng hàng loạt từ Excel</span>
                   </h3>
-                  <form onSubmit={handleAddVocab} className="space-y-4">
+
+                  <div className="mb-5 p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/20 space-y-2.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                      Chọn file Excel (.xlsx, .xls)
+                    </label>
+                    <input 
+                      type="file" 
+                      accept=".xlsx, .xls, .csv" 
+                      onChange={handleExcelImport}
+                      disabled={isImportingExcel}
+                      className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer" 
+                    />
+                    <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
+                      💡 Mẹo: File Excel cần có các cột hàng đầu: <code className="text-emerald-400 font-bold">word</code>, <code className="text-emerald-400 font-bold">gender</code> (hoặc loại từ), <code className="text-emerald-400 font-bold">phonetic</code> (phiên âm), <code className="text-emerald-400 font-bold">meaning</code>.
+                    </p>
+                    {isImportingExcel && (
+                      <p className="text-[11px] text-emerald-400 font-semibold animate-pulse">
+                        ⏳ Đang xử lý file Excel, vui lòng đợi...
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-slate-800"></div>
+                    <span className="flex-shrink mx-4 text-slate-500 text-[11px] uppercase font-bold">Hoặc thêm thủ công</span>
+                    <div className="flex-grow border-t border-slate-800"></div>
+                  </div>
+
+                  <form onSubmit={handleAddVocab} className="space-y-4 pt-2">
                     <div className="grid grid-cols-3 gap-2.5">
                       <div className="col-span-2">
                         <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Từ mới</label>
-                        <input type="text" required value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="ví dụ: Haus" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                        <input type="text" required value={newWord} onChange={(e) => setNewWord(e.target.value)} placeholder="ví dụ: ability" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Giống</label>
-                        <select value={newGender} onChange={(e) => setNewGender(e.target.value)} className="w-full rounded-xl bg-slate-950 border border-slate-800 px-2.5 py-3 text-xs font-bold uppercase text-emerald-400 focus:outline-none focus:border-indigo-500">
-                          <option value="der">der</option>
-                          <option value="die">die</option>
-                          <option value="das">das</option>
-                          <option value="none">--</option>
-                        </select>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Loại từ</label>
+                        <input type="text" value={newGender} onChange={(e) => setNewGender(e.target.value)} placeholder="n, v..." className="w-full rounded-xl bg-slate-950 border border-slate-800 px-2.5 py-3 text-xs font-bold text-emerald-400 focus:outline-none focus:border-indigo-500 text-center" />
                       </div>
                     </div>
                     <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Phiên âm</label>
+                      <input type="text" value={newPhonetic} onChange={(e) => setNewPhonetic(e.target.value)} placeholder="ví dụ: /əˈbɪl.ə.ti/" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                    </div>
+                    <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nghĩa tiếng Việt</label>
-                      <input type="text" value={newMeaning} onChange={(e) => setNewMeaning(e.target.value)} placeholder="ví dụ: Ngôi nhà" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                      <input type="text" required value={newMeaning} onChange={(e) => setNewMeaning(e.target.value)} placeholder="ví dụ: năng lực, khả năng" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Câu ví dụ</label>
@@ -992,20 +1066,23 @@ export default function LessonDetailPage() {
                 <span>📚</span> Thư mục Từ vựng <span className="text-slate-500 font-normal">({lesson?.vocabularies?.length || 0})</span>
               </h3>
               {(!lesson?.vocabularies || lesson.vocabularies.length === 0) ? (
-                <div className="bg-slate-900/40 p-16 rounded-3xl border border-dashed border-slate-800 text-center text-slate-400">Chưa có từ vựng nào.</div>
+                <div className="bg-slate-900/40 p-16 rounded-3xl border border-dashed border-slate-800 text-center text-slate-400">Chưa có từ vựng nào. Hãy tải lên file Excel để thêm hàng loạt!</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {lesson.vocabularies.map((item, idx) => (
                     <div key={item.id || idx} className="bg-slate-900/80 border border-slate-800/80 p-6 rounded-3xl shadow-xl backdrop-blur-xl flex flex-col justify-between transition-all duration-300 hover:border-indigo-500/50">
                       <div>
-                        <div className="flex justify-between items-start mb-3">
+                        <div className="flex justify-between items-start mb-1.5">
                           <span className="font-extrabold text-lg text-white">{item.word}</span>
-                          {item.gender && item.gender !== "none" && (
-                            <span className="text-[11px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg border border-emerald-500/20">{item.gender}</span>
+                          {item.gender && (
+                            <span className="text-[11px] font-bold bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg border border-emerald-500/20">{item.gender}</span>
                           )}
                         </div>
+                        {item.phonetic && (
+                          <p className="text-indigo-300 text-xs font-mono mb-2">{item.phonetic}</p>
+                        )}
                         <p className="text-slate-300 text-sm font-medium">{item.meaning || <span className="italic text-slate-500">Chưa có nghĩa</span>}</p>
-                        {item.example && <p className="text-slate-400 text-xs mt-3.5 italic bg-slate-950/60 p-3 rounded-2xl border border-slate-800/60">&quot;{item.example}&quot;</p>}
+                        {item.example && <p className="text-slate-400 text-xs mt-3.5 italic bg-slate-950/60 p-3 rounded-2xl border border-slate-800/60 line-clamp-3">&quot;{item.example}&quot;</p>}
                       </div>
                       <div className="flex justify-end space-x-3 mt-5 pt-3.5 border-t border-slate-800/80 text-xs font-bold">
                         <button onClick={() => setEditingVocab(item)} className="text-indigo-400 hover:text-indigo-300 px-3 py-1.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 transition">Sửa</button>
@@ -1019,7 +1096,6 @@ export default function LessonDetailPage() {
           </div>
         )}
 
-        {/* TAB 2: CẤU TRÚC */}
         {activeTab === "structure" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-4 h-fit sticky top-28">
@@ -1039,11 +1115,11 @@ export default function LessonDetailPage() {
                   <form onSubmit={handleAddStructure} className="space-y-4">
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Tên cấu trúc</label>
-                      <input type="text" required value={structTitle} onChange={(e) => setStructTitle(e.target.value)} placeholder="ví dụ: Nicht nur ... sondern auch" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                      <input type="text" required value={structTitle} onChange={(e) => setStructTitle(e.target.value)} placeholder="ví dụ: be able to" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Ý nghĩa</label>
-                      <input type="text" value={structMeaning} onChange={(e) => setStructMeaning(e.target.value)} placeholder="Không những ... mà còn" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
+                      <input type="text" value={structMeaning} onChange={(e) => setStructMeaning(e.target.value)} placeholder="có khả năng làm gì" className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white focus:outline-none focus:border-indigo-500" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Cách dùng</label>
@@ -1206,7 +1282,6 @@ export default function LessonDetailPage() {
           </div>
         )}
 
-        {/* TAB 3: BÀI ĐỌC */}
         {activeTab === "reading" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-4 h-fit sticky top-28">
@@ -1225,15 +1300,15 @@ export default function LessonDetailPage() {
                   </h3>
 
                   <div className="mb-4 p-4 rounded-2xl bg-blue-950/30 border border-blue-500/20 space-y-2.5">
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-300">Tự động lấy text từ tệp (Ảnh/PDF)</label>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-blue-300">Lấy text tự động từ PDF</label>
                     <input 
                       type="file" 
-                      accept="image/*,application/pdf" 
+                      accept="application/pdf" 
                       onChange={handleFileUploadForReading}
                       disabled={isExtractingFile}
                       className="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer" 
                     />
-                    {isExtractingFile && <p className="text-[11px] text-blue-400 font-semibold animate-pulse">⏳ Đang phân tích tệp trên trình duyệt...</p>}
+                    {isExtractingFile && <p className="text-[11px] text-blue-400 font-semibold animate-pulse">⏳ Đang phân tích file PDF...</p>}
                   </div>
 
                   <form onSubmit={handleAddReading} className="space-y-4">
@@ -1243,7 +1318,7 @@ export default function LessonDetailPage() {
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Nội dung văn bản</label>
-                      <textarea value={readingBody} onChange={(e) => setReadingBody(e.target.value)} placeholder="Nhập hoặc tải file lên để tự động điền nội dung..." className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white h-40 focus:outline-none focus:border-indigo-500 resize-none" />
+                      <textarea value={readingBody} onChange={(e) => setReadingBody(e.target.value)} placeholder="Nhập nội dung bài đọc..." className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-3 text-sm text-white h-40 focus:outline-none focus:border-indigo-500 resize-none" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Ghi chú (Note)</label>
