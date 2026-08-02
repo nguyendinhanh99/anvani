@@ -73,6 +73,38 @@ export default function DashboardPage() {
     // --- STATE CHO TOAST NOTIFICATION ---
     const [toast, setToast] = useState({ show: false, message: "", type: "success" });
 
+    // --- STATE CHO CUSTOM CONFIRM MODAL (THAY THẾ window.confirm) ---
+    const [confirmModal, setConfirmModal] = useState({
+        show: false,
+        title: "",
+        message: "",
+        onConfirm: null,
+    });
+
+    const triggerConfirm = (title, message, onConfirm) => {
+        setConfirmModal({
+            show: true,
+            title,
+            message,
+            onConfirm,
+        });
+    };
+
+    // --- STATE TẮT/BẬT ÂM THANH THÔNG BÁO ---
+    const [soundEnabled, setSoundEnabled] = useState(() => {
+        if (typeof window !== "undefined") {
+            const savedSound = localStorage.getItem("app_sound_enabled");
+            return savedSound !== null ? JSON.parse(savedSound) : true;
+        }
+        return true;
+    });
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            localStorage.setItem("app_sound_enabled", JSON.stringify(soundEnabled));
+        }
+    }, [soundEnabled]);
+
     const showToast = (message, type = "success") => {
         setToast({ show: true, message, type });
         setTimeout(() => {
@@ -109,6 +141,8 @@ export default function DashboardPage() {
     
     // State mở modal xem tất cả lời động viên
     const [isAllCheersModalOpen, setIsAllCheersModalOpen] = useState(false);
+    
+    const prevCheersCountRef = useRef(null);
 
     // --- XỬ LÝ SỰ KIỆN IDLE ---
     useEffect(() => {
@@ -206,7 +240,6 @@ export default function DashboardPage() {
         };
     }, [user, displayName, isIdle]);
 
-    // Lấy danh sách lời động viên (Tăng giới hạn lên 50 để xem đầy đủ hơn trong Modal)
     useEffect(() => {
         if (!user) return;
         const cheersQuery = query(
@@ -220,11 +253,44 @@ export default function DashboardPage() {
             snapshot.forEach((docSnap) => {
                 list.push({ id: docSnap.id, ...docSnap.data() });
             });
+
+            if (prevCheersCountRef.current !== null && list.length > prevCheersCountRef.current) {
+                const latestCheer = list[0];
+                showToast(`💖 Bạn vừa nhận được lời động viên từ ${latestCheer.senderName || "Học viên"}!`, "success");
+                
+                if (soundEnabled) {
+                    try {
+                        const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
+                        audio.volume = 0.4;
+                        audio.play().catch(() => {});
+                    } catch (e) {}
+                }
+            }
+
+            prevCheersCountRef.current = list.length;
             setIncomingCheers(list);
         });
 
         return () => unsubscribeCheers();
-    }, [user]);
+    }, [user, soundEnabled]);
+
+    // --- HÀM XÓA LỜI ĐỘNG VIÊN (SỬ DỤNG CUSTOM MODAL) ---
+    const handleDeleteCheer = (cheerId, e) => {
+        e.stopPropagation();
+        triggerConfirm(
+            "Xóa lời động viên",
+            "Bạn có chắc chắn muốn xóa lời động viên này không? Thao tác này không thể hoàn tác.",
+            async () => {
+                try {
+                    await deleteDoc(doc(db, "users", user.uid, "cheers", cheerId));
+                    showToast("Đã xóa lời động viên thành công.", "success");
+                } catch (error) {
+                    console.error("Lỗi khi xóa lời động viên:", error);
+                    showToast("Không thể xóa thông báo. Vui lòng thử lại.", "error");
+                }
+            }
+        );
+    };
 
     useEffect(() => {
         const fetchStudyLeaderboard = async () => {
@@ -683,21 +749,26 @@ export default function DashboardPage() {
         }
     };
 
-    const handleDeleteSubject = async (subId, e) => {
+    // --- HÀM XÓA MÔN HỌC (SỬ DỤNG CUSTOM MODAL) ---
+    const handleDeleteSubject = (subId, e) => {
         e.stopPropagation();
-        if (!confirm("Bạn có chắc chắn muốn xóa môn học này không?")) return;
+        triggerConfirm(
+            "Xóa môn học",
+            "Bạn có chắc chắn muốn xóa môn học này không? Tất cả dữ liệu liên quan sẽ bị loại bỏ.",
+            async () => {
+                const updatedList = customSubjects.filter((sub) => sub.id !== subId);
+                setCustomSubjects(updatedList);
+                localStorage.setItem("cached_custom_subjects", JSON.stringify(updatedList));
+                showToast("Đã xóa môn học.", "success");
 
-        const updatedList = customSubjects.filter((sub) => sub.id !== subId);
-        setCustomSubjects(updatedList);
-        localStorage.setItem("cached_custom_subjects", JSON.stringify(updatedList));
-        showToast("Đã xóa môn học.", "success");
-
-        try {
-            await deleteDoc(doc(db, "subjects", subId));
-        } catch (error) {
-            console.error("Lỗi khi xóa môn học:", error);
-            fetchCustomSubjectsFromDB();
-        }
+                try {
+                    await deleteDoc(doc(db, "subjects", subId));
+                } catch (error) {
+                    console.error("Lỗi khi xóa môn học:", error);
+                    fetchCustomSubjectsFromDB();
+                }
+            }
+        );
     };
 
     const formatTime = (totalSeconds) => {
@@ -741,6 +812,49 @@ export default function DashboardPage() {
                 </div>
             )}
 
+            {/* --- CUSTOM CONFIRM MODAL (THAY THẾ WINDOW.CONFIRM) --- */}
+            {confirmModal.show && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md px-4 animate-fadeIn">
+                    <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-slate-800 p-8 shadow-2xl transform transition-all">
+                        <div className="flex items-center space-x-3.5 mb-4">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/30 text-xl shadow-inner">
+                                ⚠️
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-white">
+                                    {confirmModal.title || "Xác nhận hành động"}
+                                </h3>
+                                <p className="text-xs text-rose-400 font-medium">Thao tác này cần bạn xác nhận</p>
+                            </div>
+                        </div>
+
+                        <p className="text-sm text-slate-300 mb-8 leading-relaxed font-medium">
+                            {confirmModal.message}
+                        </p>
+
+                        <div className="flex items-center space-x-3">
+                            <button
+                                type="button"
+                                onClick={() => setConfirmModal({ show: false, title: "", message: "", onConfirm: null })}
+                                className="flex-1 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition border border-slate-700"
+                            >
+                                Hủy bỏ
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (confirmModal.onConfirm) confirmModal.onConfirm();
+                                    setConfirmModal({ show: false, title: "", message: "", onConfirm: null });
+                                }}
+                                className="flex-1 py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition border border-rose-400/20 active:scale-95"
+                            >
+                                Xác nhận xóa 🗑️
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Cảnh báo treo máy */}
             {isIdle && (
                 <div className="bg-amber-500 text-slate-950 px-4 py-2 text-center text-xs font-bold sticky top-0 z-40 flex items-center justify-center space-x-2 shadow-lg animate-pulse">
@@ -763,7 +877,20 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={() => setSoundEnabled(!soundEnabled)}
+                            className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all duration-300 ${
+                                soundEnabled
+                                    ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
+                                    : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300"
+                            }`}
+                            title={soundEnabled ? "Tắt âm thanh thông báo" : "Bật âm thanh thông báo"}
+                        >
+                            <span>{soundEnabled ? "🔊" : "🔇"}</span>
+                            <span className="hidden sm:inline">{soundEnabled ? "Âm thanh: Bật" : "Âm thanh: Tắt"}</span>
+                        </button>
+
                         <div className="hidden lg:flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs font-medium text-slate-300 shadow-inner">
                             <span className={`w-2 h-2 rounded-full ${isIdle ? "bg-amber-500" : "bg-emerald-500 animate-pulse"}`}></span>
                             <span>Phiên hiện tại:</span>
@@ -818,7 +945,7 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                {/* Hộp thông báo Lời động viên nhận được gần đây (Có nút Xem tất cả) */}
+                {/* Hộp thông báo Lời động viên nhận được gần đây */}
                 {incomingCheers.length > 0 && (
                     <div className="mb-8 p-6 rounded-3xl bg-gradient-to-r from-rose-950/40 via-slate-900 to-indigo-950/40 border border-rose-500/30 shadow-xl backdrop-blur-xl">
                         <div className="flex items-center justify-between mb-4">
@@ -836,8 +963,15 @@ export default function DashboardPage() {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {incomingCheers.slice(0, 3).map((item) => (
-                                <div key={item.id} className="p-4 rounded-2xl bg-slate-950/85 border border-rose-500/20 shadow-inner flex flex-col justify-between">
-                                    <p className="text-xs text-slate-200 italic mb-3">"{item.message}"</p>
+                                <div key={item.id} className="p-4 rounded-2xl bg-slate-950/85 border border-rose-500/20 shadow-inner flex flex-col justify-between relative group">
+                                    <button
+                                        onClick={(e) => handleDeleteCheer(item.id, e)}
+                                        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition p-1.5 rounded-lg bg-slate-900 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-xs shadow-md"
+                                        title="Xóa thông báo"
+                                    >
+                                        🗑️
+                                    </button>
+                                    <p className="text-xs text-slate-200 italic mb-3 pr-6">"{item.message}"</p>
                                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
                                         <span className="font-bold text-rose-300">❤️ {item.senderName}</span>
                                         <span>{item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", {hour: '2-digit', minute:'2-digit'}) : "Vừa xong"}</span>
@@ -1091,23 +1225,70 @@ export default function DashboardPage() {
                                             <p className="text-xs text-slate-400 mt-1">Hãy bắt đầu học trên Dashboard để ghi nhận thời gian.</p>
                                         </div>
                                     ) : (
-                                        <div className="space-y-3 max-h-[320px] overflow-y-auto pr-1">
-                                            {dailyHistory.map((item, index) => (
-                                                <div key={index} className="flex items-center justify-between p-4 rounded-2xl border border-slate-800 bg-slate-950/60">
-                                                    <div className="flex items-center space-x-3">
-                                                        <span className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/20">
-                                                            🗓️
-                                                        </span>
-                                                        <div>
-                                                            <h4 className="text-xs font-bold text-white">Ngày: {item.date}</h4>
-                                                            <p className="text-[11px] text-slate-400 mt-0.5">Đã hoàn thành phiên học</p>
-                                                        </div>
-                                                    </div>
-                                                    <span className="px-3 py-1 rounded-xl bg-indigo-500/10 text-indigo-300 font-extrabold text-xs border border-indigo-500/20">
-                                                        {formatTime(item.totalSeconds)}
+                                        <div className="space-y-6">
+                                            <div className="bg-slate-950/70 p-5 rounded-2xl border border-slate-800 shadow-inner">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                        📊 Biểu đồ so sánh tiến độ gần đây
                                                     </span>
+                                                    <span className="text-[10px] text-slate-400">Top 7 ngày gần nhất</span>
                                                 </div>
-                                            ))}
+
+                                                {(() => {
+                                                    const recentDays = [...dailyHistory].slice(0, 7).reverse();
+                                                    const maxSeconds = Math.max(...recentDays.map(d => d.totalSeconds), 1);
+
+                                                    return (
+                                                        <div className="flex items-end justify-between gap-2 h-36 pt-6 px-2 border-b border-slate-800">
+                                                            {recentDays.map((item, index) => {
+                                                                const heightPercent = Math.max(Math.round((item.totalSeconds / maxSeconds) * 100), 10);
+                                                                const prevItem = index > 0 ? recentDays[index - 1] : null;
+                                                                const diff = prevItem ? item.totalSeconds - prevItem.totalSeconds : 0;
+
+                                                                return (
+                                                                    <div key={index} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                                                                        <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition bg-slate-900 text-white text-[10px] px-2.5 py-1 rounded-lg border border-slate-700 shadow-xl whitespace-nowrap z-20 pointer-events-none">
+                                                                            {item.date}: {formatTime(item.totalSeconds)}
+                                                                            {prevItem && (
+                                                                                <span className={`block font-bold ${diff >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                                                                    {diff >= 0 ? `+${formatTime(diff)} so với hôm trước` : `-${formatTime(Math.abs(diff))} so với hôm trước`}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+
+                                                                        <div 
+                                                                            style={{ height: `${heightPercent}%` }}
+                                                                            className="w-full max-w-[32px] rounded-t-xl bg-gradient-to-t from-indigo-600 to-cyan-400 transition-all duration-500 group-hover:from-indigo-500 group-hover:to-cyan-300 shadow-lg shadow-cyan-500/10"
+                                                                        ></div>
+                                                                        <span className="text-[10px] text-slate-400 mt-2 truncate w-full text-center font-medium">
+                                                                            {item.date.split("-").slice(1).join("/")}
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+
+                                            <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                                                {dailyHistory.map((item, index) => (
+                                                    <div key={index} className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-800 bg-slate-950/60">
+                                                        <div className="flex items-center space-x-3">
+                                                            <span className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/20">
+                                                                🗓️
+                                                            </span>
+                                                            <div>
+                                                                <h4 className="text-xs font-bold text-white">Ngày: {item.date}</h4>
+                                                                <p className="text-[10px] text-slate-400 mt-0.5">Đã hoàn thành phiên học</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="px-3 py-1 rounded-xl bg-indigo-500/10 text-indigo-300 font-extrabold text-xs border border-indigo-500/20">
+                                                            {formatTime(item.totalSeconds)}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -1527,8 +1708,15 @@ export default function DashboardPage() {
                                 <div className="text-center py-12 text-slate-500">Chưa có lời động viên nào.</div>
                             ) : (
                                 incomingCheers.map((item) => (
-                                    <div key={item.id} className="p-4 rounded-2xl bg-slate-950/85 border border-rose-500/20 shadow-inner flex flex-col justify-between">
-                                        <p className="text-xs md:text-sm text-slate-200 italic mb-3">"{item.message}"</p>
+                                    <div key={item.id} className="p-4 rounded-2xl bg-slate-950/85 border border-rose-500/20 shadow-inner flex flex-col justify-between relative group">
+                                        <button
+                                            onClick={(e) => handleDeleteCheer(item.id, e)}
+                                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition p-1.5 rounded-lg bg-slate-900 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-xs shadow-md"
+                                            title="Xóa thông báo"
+                                        >
+                                            🗑️
+                                        </button>
+                                        <p className="text-xs md:text-sm text-slate-200 italic mb-3 pr-6">"{item.message}"</p>
                                         <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
                                             <span className="font-bold text-rose-300">❤️ {item.senderName}</span>
                                             <span>{item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleString("vi-VN") : "Vừa xong"}</span>
