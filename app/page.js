@@ -138,10 +138,10 @@ export default function DashboardPage() {
     const [isCheerModalOpen, setIsCheerModalOpen] = useState(false);
     const [sendingCheer, setSendingCheer] = useState(false);
     const [incomingCheers, setIncomingCheers] = useState([]);
-    
+
     // State mở modal xem tất cả lời động viên
     const [isAllCheersModalOpen, setIsAllCheersModalOpen] = useState(false);
-    
+
     const prevCheersCountRef = useRef(null);
 
     // --- XỬ LÝ SỰ KIỆN IDLE ---
@@ -257,13 +257,13 @@ export default function DashboardPage() {
             if (prevCheersCountRef.current !== null && list.length > prevCheersCountRef.current) {
                 const latestCheer = list[0];
                 showToast(`💖 Bạn vừa nhận được lời động viên từ ${latestCheer.senderName || "Học viên"}!`, "success");
-                
+
                 if (soundEnabled) {
                     try {
                         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
                         audio.volume = 0.4;
-                        audio.play().catch(() => {});
-                    } catch (e) {}
+                        audio.play().catch(() => { });
+                    } catch (e) { }
                 }
             }
 
@@ -547,7 +547,7 @@ export default function DashboardPage() {
                 const data = docSnap.data();
                 let subjectName = "Môn học chung";
                 try {
-                    const subjectRef = docSnap.ref.parent.parent; 
+                    const subjectRef = docSnap.ref.parent.parent;
                     if (subjectRef) {
                         const subjectSnap = await getDoc(subjectRef);
                         if (subjectSnap.exists()) {
@@ -866,25 +866,28 @@ export default function DashboardPage() {
             <header className="sticky top-0 z-30 backdrop-blur-xl bg-slate-950/80 border-b border-slate-800/80 shadow-2xl">
                 <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
                     <div className="flex items-center space-x-3.5 group cursor-pointer" onClick={() => setActiveTab("subjects")}>
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-cyan-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform duration-300">
-                            <span className="text-xl">🦉</span>
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-cyan-500 flex items-center justify-center overflow-hidden shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform duration-300">
+                            <img
+                                src="/owl.png"
+                                alt="Owl Icon"
+                                className="w-full h-full object-cover"
+                            />
                         </div>
                         <div>
                             <h1 className="font-extrabold text-white text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                                Polyglot & Study Hub
+                                Anvani Pro
                             </h1>
-                            <p className="text-xs text-indigo-400 font-medium tracking-wide">Enterprise Knowledge Base</p>
+                            <p className="text-xs text-indigo-400 font-medium tracking-wide">Học thông minh, phát triển bền vững</p>
                         </div>
                     </div>
 
                     <div className="flex items-center space-x-3">
                         <button
                             onClick={() => setSoundEnabled(!soundEnabled)}
-                            className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all duration-300 ${
-                                soundEnabled
-                                    ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
-                                    : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300"
-                            }`}
+                            className={`flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all duration-300 ${soundEnabled
+                                ? "bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
+                                : "bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300"
+                                }`}
                             title={soundEnabled ? "Tắt âm thanh thông báo" : "Bật âm thanh thông báo"}
                         >
                             <span>{soundEnabled ? "🔊" : "🔇"}</span>
@@ -918,7 +921,7 @@ export default function DashboardPage() {
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-900/45 via-slate-900 to-slate-900/90 border border-slate-800/80 p-8 md:p-12 shadow-2xl mb-10 backdrop-blur-xl">
                     <div className="absolute -right-20 -top-20 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
                     <div className="absolute right-40 -bottom-20 w-80 h-80 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none"></div>
-                    
+
                     <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                         <div className="max-w-xl">
                             <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold tracking-wider uppercase mb-5 shadow-inner">
@@ -974,7 +977,7 @@ export default function DashboardPage() {
                                     <p className="text-xs text-slate-200 italic mb-3 pr-6">"{item.message}"</p>
                                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800">
                                         <span className="font-bold text-rose-300">❤️ {item.senderName}</span>
-                                        <span>{item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", {hour: '2-digit', minute:'2-digit'}) : "Vừa xong"}</span>
+                                        <span>{item.createdAt?.seconds ? new Date(item.createdAt.seconds * 1000).toLocaleTimeString("vi-VN", { hour: '2-digit', minute: '2-digit' }) : "Vừa xong"}</span>
                                     </div>
                                 </div>
                             ))}
@@ -986,62 +989,65 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-3 mb-8 border-b border-slate-800 pb-4 overflow-x-auto no-scrollbar">
                     <button
                         onClick={() => setActiveTab("subjects")}
-                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 whitespace-nowrap flex items-center space-x-2 ${
-                            activeTab === "subjects"
-                                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/30"
-                                : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
-                        }`}
+                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 whitespace-nowrap flex items-center space-x-2 ${activeTab === "subjects"
+                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 border border-indigo-400/30"
+                            : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
+                            }`}
                     >
                         <span>📚</span>
                         <span>Sổ tay cá nhân ({customSubjects.length})</span>
                     </button>
                     <button
-                        onClick={() => setActiveTab("studyTime")}
-                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 whitespace-nowrap flex items-center space-x-2 ${
-                            activeTab === "studyTime"
-                                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 border border-emerald-400/30"
-                                : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
-                        }`}
+                        onClick={() => router.push("/Library")}
+                        className="px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
                     >
-                        <span>⏱️</span>
-                        <span>Thời gian học & Hẹn giờ</span>
+                        <span>📚</span>
+                        <span>Thư viện hệ thống</span>
                     </button>
                     <button
                         onClick={() => setActiveTab("globalSearch")}
-                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${
-                            activeTab === "globalSearch"
-                                ? "bg-teal-600 text-white shadow-lg shadow-teal-600/30 border border-teal-400/30"
-                                : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
-                        }`}
+                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${activeTab === "globalSearch"
+                            ? "bg-teal-600 text-white shadow-lg shadow-teal-600/30 border border-teal-400/30"
+                            : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
+                            }`}
                     >
                         <span>🔍</span>
-                        <span>Tra cứu chung</span>
+                        <span>Từ điển</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("studyTime")}
+                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 whitespace-nowrap flex items-center space-x-2 ${activeTab === "studyTime"
+                            ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 border border-emerald-400/30"
+                            : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
+                            }`}
+                    >
+                        <span>⏱️</span>
+                        <span>Quản lý thời gian</span>
                     </button>
                     <button
                         onClick={() => {
                             setActiveTab("leaderboard");
                             fetchUserScores();
                         }}
-                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${
-                            activeTab === "leaderboard"
-                                ? "bg-amber-600 text-white shadow-lg shadow-amber-600/30 border border-amber-400/30"
-                                : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
-                        }`}
+                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${activeTab === "leaderboard"
+                            ? "bg-amber-600 text-white shadow-lg shadow-amber-600/30 border border-amber-400/30"
+                            : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
+                            }`}
                     >
                         <span>🏛️</span>
                         <span>Ngôi đền danh vọng</span>
                     </button>
                     <button
                         onClick={() => setActiveTab("profile")}
-                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${
-                            activeTab === "profile"
-                                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30 border border-violet-400/30"
-                                : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
-                        }`}
+                        className={`px-5 py-3 rounded-2xl font-bold text-xs md:text-sm transition-all duration-300 flex items-center space-x-2 whitespace-nowrap ${activeTab === "profile"
+                            ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30 border border-violet-400/30"
+                            : "bg-slate-900/80 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
+                            }`}
                     >
                         <span>⚙️</span>
-                        <span>Hồ sơ cá nhân</span>
+                        <span>Cài đặt chung</span>
                     </button>
+
                 </div>
 
                 {/* TAB 1: SỔ TAY MÔN HỌC */}
@@ -1165,11 +1171,10 @@ export default function DashboardPage() {
                                                             setRemainingTimerSeconds(mins * 60);
                                                             setIsTimerRunning(false);
                                                         }}
-                                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${
-                                                            targetMinutes === mins
-                                                                ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
-                                                                : "bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white"
-                                                        }`}
+                                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition ${targetMinutes === mins
+                                                            ? "bg-emerald-600 text-white border-emerald-500 shadow-md"
+                                                            : "bg-slate-950 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-white"
+                                                            }`}
                                                     >
                                                         {mins} phút
                                                     </button>
@@ -1256,7 +1261,7 @@ export default function DashboardPage() {
                                                                             )}
                                                                         </div>
 
-                                                                        <div 
+                                                                        <div
                                                                             style={{ height: `${heightPercent}%` }}
                                                                             className="w-full max-w-[32px] rounded-t-xl bg-gradient-to-t from-indigo-600 to-cyan-400 transition-all duration-500 group-hover:from-indigo-500 group-hover:to-cyan-300 shadow-lg shadow-cyan-500/10"
                                                                         ></div>
@@ -1391,11 +1396,10 @@ export default function DashboardPage() {
                                         return (
                                             <div
                                                 key={item.uid}
-                                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                                                    isMe
-                                                        ? "bg-indigo-950/40 border-indigo-500/50 shadow-md"
-                                                        : "bg-slate-950/60 border-slate-800"
-                                                }`}
+                                                className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isMe
+                                                    ? "bg-indigo-950/40 border-indigo-500/50 shadow-md"
+                                                    : "bg-slate-950/60 border-slate-800"
+                                                    }`}
                                             >
                                                 <div className="flex items-center space-x-4">
                                                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs border ${rankBadge}`}>
@@ -1489,11 +1493,10 @@ export default function DashboardPage() {
                                                 <span className="px-3 py-1 text-[11px] font-bold bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/20 flex items-center gap-1">
                                                     🌐 Môn: {item.subjectName}
                                                 </span>
-                                                <span className={`px-3 py-1 text-[11px] font-bold rounded-full border ${
-                                                    item.type === "Từ vựng" 
-                                                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                                                        : "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                                                }`}>
+                                                <span className={`px-3 py-1 text-[11px] font-bold rounded-full border ${item.type === "Từ vựng"
+                                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                                    : "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                                                    }`}>
                                                     📖 {item.type}
                                                 </span>
                                                 {item.lessonTitle && (
@@ -1505,7 +1508,7 @@ export default function DashboardPage() {
 
                                             <h4 className="text-lg font-bold text-white">{item.word}</h4>
                                             <p className="text-slate-300 text-sm mt-1"><span className="font-semibold text-slate-400">Ý nghĩa:</span> {item.definition}</p>
-                                            
+
                                             {item.example && (
                                                 <p className="text-xs md:text-sm text-slate-400 italic mt-2.5 bg-slate-900 p-3 rounded-xl border border-slate-800/80">
                                                     Ví dụ: {item.example}
@@ -1595,11 +1598,10 @@ export default function DashboardPage() {
                         </div>
 
                         {profileMessage.text && (
-                            <div className={`mb-6 p-4 rounded-2xl text-xs md:text-sm font-bold border ${
-                                profileMessage.type === "success"
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                    : "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                            }`}>
+                            <div className={`mb-6 p-4 rounded-2xl text-xs md:text-sm font-bold border ${profileMessage.type === "success"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                                : "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                                }`}>
                                 {profileMessage.text}
                             </div>
                         )}
