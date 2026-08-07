@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from "@/src/context/AuthContext";
 
 // Tiện ích âm thanh dùng chung (Web Audio API)
@@ -41,8 +41,11 @@ const playSound = (type) => {
 
 export default function GameHubPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  
   const subjectId = params?.subjectId;
+  const lessonId = searchParams.get("lessonId"); // Bắt đúng lessonId từ URL dạng ?lessonId=...
   const { user } = useAuth();
 
   const [selectedGame, setSelectedGame] = useState(null);
@@ -56,6 +59,7 @@ export default function GameHubPage() {
         userId: user.uid,
         userEmail: user.email || "",
         subjectId: subjectId,
+        lessonId: lessonId || "all",
         gameName: gameName,
         score: score,
         total: total,
@@ -69,23 +73,41 @@ export default function GameHubPage() {
   useEffect(() => {
     if (!subjectId) return;
 
-    const fetchSubjectData = async () => {
+    const fetchVocabData = async () => {
       try {
-        const lessonsRef = collection(db, "subjects", subjectId, "lessons");
-        const querySnapshot = await getDocs(lessonsRef);
-
         let allVocabs = [];
-        querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const items = data.vocabularies || data.words || [];
-          const formatted = items.map((item, idx) => ({
-            id: docSnap.id + "-" + idx,
-            term: item.term || item.word || item.q || "",
-            meaning: item.meaning || item.definition || item.a || "",
-          })).filter(item => item.term && item.meaning);
 
-          allVocabs = [...allVocabs, ...formatted];
-        });
+        if (lessonId) {
+          // Trường hợp 1: Lấy từ vựng của đúng một bài học cụ thể
+          const lessonDocRef = doc(db, "subjects", subjectId, "lessons", lessonId);
+          const lessonDocSnap = await getDoc(lessonDocRef);
+          
+          if (lessonDocSnap.exists()) {
+            const data = lessonDocSnap.data();
+            const items = data.vocabularies || data.words || [];
+            allVocabs = items.map((item, idx) => ({
+              id: lessonId + "-" + idx,
+              term: item.term || item.word || item.q || "",
+              meaning: item.meaning || item.definition || item.a || "",
+            })).filter(item => item.term && item.meaning);
+          }
+        } else {
+          // Trường hợp 2: Lấy toàn bộ từ vựng của tất cả bài học trong môn (Khi bấm "Ôn tập môn học")
+          const lessonsRef = collection(db, "subjects", subjectId, "lessons");
+          const querySnapshot = await getDocs(lessonsRef);
+
+          querySnapshot.forEach((docSnap) => {
+            const data = docSnap.data();
+            const items = data.vocabularies || data.words || [];
+            const formatted = items.map((item, idx) => ({
+              id: docSnap.id + "-" + idx,
+              term: item.term || item.word || item.q || "",
+              meaning: item.meaning || item.definition || item.a || "",
+            })).filter(item => item.term && item.meaning);
+
+            allVocabs = [...allVocabs, ...formatted];
+          });
+        }
 
         setVocabList(allVocabs);
       } catch (error) {
@@ -95,8 +117,8 @@ export default function GameHubPage() {
       }
     };
 
-    fetchSubjectData();
-  }, [subjectId]);
+    fetchVocabData();
+  }, [subjectId, lessonId]);
 
   const gameList = [
     {
@@ -120,7 +142,7 @@ export default function GameHubPage() {
     {
       id: "scramble",
       title: "Thợ Săn Từ Vựng",
-      description: "Sắp xếp lại các ký tự bị xáo trộn để tạo thành từ tiếng Anh chính xác.",
+      description: "Sắp xếp lại các ký tự bị xáo trộn để tạo thành từ chính xác.",
       icon: "🎯",
       gradient: "from-amber-500 to-orange-600",
       shadow: "shadow-orange-500/25",
@@ -159,7 +181,6 @@ export default function GameHubPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 relative overflow-hidden selection:bg-pink-500 selection:text-white">
-      {/* Background glow effects */}
       <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-pink-600/10 rounded-full blur-[140px] pointer-events-none animate-pulse"></div>
       <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[140px] pointer-events-none"></div>
 
@@ -168,19 +189,20 @@ export default function GameHubPage() {
           onClick={() => {
             playSound("click");
             if (selectedGame) setSelectedGame(null);
+            else if (lessonId) router.push(`/subjects/${subjectId}/lessons/${lessonId}`);
             else router.push(`/subjects/${subjectId}`);
           }}
           className="mb-8 inline-flex items-center text-sm font-semibold text-slate-400 hover:text-white transition-all bg-slate-900/80 hover:bg-slate-800 px-4 py-2.5 rounded-2xl border border-slate-800 shadow-sm backdrop-blur-md group"
         >
           <span className="group-hover:-translate-x-1 transition-transform mr-2">←</span>
-          {selectedGame ? "Quay lại danh sách game" : "Quay lại môn học"}
+          {selectedGame ? "Quay lại danh sách game" : lessonId ? "Quay lại bài học" : "Quay lại môn học"}
         </button>
 
         {!selectedGame && (
           <div className="animate-fadeIn">
             <div className="mb-10 text-center md:text-left">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-pink-500/10 text-pink-400 text-xs font-bold tracking-wider uppercase mb-4 border border-pink-500/20 shadow-inner">
-                <span>🕹️</span> Arcade Gamification Hub
+                <span>🕹️</span> Arcade Gamification Hub {lessonId && "(Ôn tập bài học riêng lẻ)"}
               </div>
               <h2 className="text-3xl md:text-5xl font-black tracking-tight text-white bg-gradient-to-r from-white via-slate-200 to-pink-400 bg-clip-text text-transparent">
                 Kho Game Ôn Tập
@@ -192,12 +214,12 @@ export default function GameHubPage() {
               <div className="text-center py-20 bg-slate-900/50 backdrop-blur-xl rounded-3xl border border-dashed border-slate-800 shadow-2xl p-8">
                 <span className="text-6xl mb-4 block animate-bounce">📭</span>
                 <h3 className="text-lg font-bold text-white">Chưa có từ vựng nào</h3>
-                <p className="text-sm text-slate-400 mt-1 mb-6">Vui lòng thêm bài học và từ vựng trước khi bắt đầu trải nghiệm game.</p>
+                <p className="text-sm text-slate-400 mt-1 mb-6">Vui lòng thêm từ vựng vào bài học trước khi bắt đầu trải nghiệm game.</p>
                 <button
-                  onClick={() => router.push(`/subjects/${subjectId}`)}
+                  onClick={() => router.push(lessonId ? `/subjects/${subjectId}/lessons/${lessonId}` : `/subjects/${subjectId}`)}
                   className="px-6 py-3 bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold text-sm rounded-2xl shadow-lg shadow-pink-600/30 hover:scale-105 transition-all"
                 >
-                  Thêm bài học ngay
+                  Quay về quản lý từ vựng
                 </button>
               </div>
             ) : (
@@ -251,8 +273,7 @@ export default function GameHubPage() {
   );
 }
 
-// 0. WORD ADVENTURE GAME (PHÊN BẢN THUẦN ARCADE GAME)
-// 0. WORD ADVENTURE GAME (PREMIUM 3D RUNNER ARCADE EDITION - FULL CODE)
+// 0. WORD ADVENTURE GAME
 function WordAdventureGame({ vocabList, saveScore }) {
   const [rounds, setRounds] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -261,7 +282,7 @@ function WordAdventureGame({ vocabList, saveScore }) {
   const [coins, setCoins] = useState(56);
   const [combo, setCombo] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
-  const [statusAnim, setStatusAnim] = useState(null); // 'correct' | 'wrong'
+  const [statusAnim, setStatusAnim] = useState(null);
   const [selectedLaneIndex, setSelectedLaneIndex] = useState(null);
   const [isMoving, setIsMoving] = useState(false);
 
@@ -383,12 +404,8 @@ function WordAdventureGame({ vocabList, saveScore }) {
         }
       `}} />
 
-      {/* KHUNG GAME CHUẨN UI/UX CAO CẤP */}
       <div className="relative bg-gradient-to-b from-[#0f172a] via-[#1e293b] to-[#090d16] rounded-[32px] overflow-hidden shadow-2xl border-[5px] border-cyan-500/40 max-w-md mx-auto flex flex-col h-[740px] select-none">
-
-        {/* ================= HEADER HUD ================= */}
         <div className="absolute top-0 inset-x-0 z-40 flex items-center justify-between p-3.5 bg-gradient-to-b from-slate-950/90 via-slate-950/40 to-transparent backdrop-blur-sm">
-          {/* Stage & Checkpoint Progress */}
           <div className="flex flex-col bg-slate-900/90 border border-sky-500/40 px-3 py-1.5 rounded-2xl shadow-lg">
             <span className="text-[10px] font-black text-sky-400 uppercase tracking-widest">
               STAGE {currentIndex + 1} / {rounds.length}
@@ -402,7 +419,6 @@ function WordAdventureGame({ vocabList, saveScore }) {
             </div>
           </div>
 
-          {/* XP, COINS & LIVES */}
           <div className="flex items-center gap-2">
             <div className="bg-slate-900/90 border border-amber-500/40 px-2.5 py-1.5 rounded-2xl shadow-lg text-[11px] font-black text-amber-400 flex items-center gap-1">
               <span>⚡</span> {scoreXP} XP
@@ -416,16 +432,12 @@ function WordAdventureGame({ vocabList, saveScore }) {
           </div>
         </div>
 
-        {/* ================= WORLD 3D RUNNER CANVAS ================= */}
         <div className="relative flex-1 overflow-hidden flex flex-col items-center pt-16 bg-gradient-to-b from-sky-400 via-sky-300 to-emerald-400">
-
-          {/* Mây trời */}
           <div className="absolute top-14 w-full flex justify-around opacity-80 pointer-events-none">
             <span className="text-2xl animate-pulse">☁️</span>
             <span className="text-3xl animate-pulse delay-300">☁️</span>
           </div>
 
-          {/* Hàng cây 2 bên đường */}
           <div className="absolute inset-x-2 top-16 bottom-0 flex justify-between px-2 pointer-events-none">
             <div className="flex flex-col space-y-10 opacity-90">
               <span className="text-3xl animate-bounce">🌲</span>
@@ -439,13 +451,9 @@ function WordAdventureGame({ vocabList, saveScore }) {
             </div>
           </div>
 
-          {/* ĐƯỜNG ĐUA CHÍNH */}
           <div className="absolute bottom-0 w-[84%] h-[84%] bg-[#b8532f] rounded-t-[40px] border-x-4 border-emerald-400 shadow-2xl flex flex-col items-center overflow-hidden animate-road bg-[linear-gradient(0deg,rgba(255,255,255,0.12)_2px,transparent_2px)] bg-[size:100%_45px]">
-
-            {/* Vạch kẻ làn giữa */}
             <div className="absolute inset-y-0 w-1 bg-white/30 border-r border-dashed border-white/60"></div>
 
-            {/* TỪ KHÓA MỤC TIÊU */}
             <div className="relative z-30 mt-4 bg-[#0d1322] border-2 border-cyan-400 px-6 py-2 rounded-2xl shadow-[0_8px_20px_rgba(0,0,0,0.6)] text-center">
               <div className="flex items-center justify-center gap-1.5 mb-0.5">
                 <span className="text-xs">🎯</span>
@@ -456,7 +464,6 @@ function WordAdventureGame({ vocabList, saveScore }) {
               </span>
             </div>
 
-            {/* 3 CỔNG ĐÁP ÁN (3 TẦNG THỨC / LÀN ĐƯỜNG) */}
             <div className="relative z-35 w-[94%] mt-4 flex flex-col gap-2.5 px-1">
               {currentRound.options.map((opt, idx) => {
                 let boxStyle = "bg-gradient-to-r from-amber-800 to-amber-700 border-amber-500 text-white shadow-lg";
@@ -507,7 +514,6 @@ function WordAdventureGame({ vocabList, saveScore }) {
               })}
             </div>
 
-            {/* GÓC COMBO & MẸO */}
             <div className="absolute bottom-16 inset-x-2 z-20 flex justify-between items-end px-2 pointer-events-none">
               {combo > 1 ? (
                 <div className="bg-slate-950/90 border border-amber-500/60 rounded-2xl p-2.5 shadow-xl text-center backdrop-blur-md animate-bounce">
@@ -528,7 +534,6 @@ function WordAdventureGame({ vocabList, saveScore }) {
               </div>
             </div>
 
-            {/* NHÂN VẬT CHẠY VỚI ẢNH ĐỘNG GIPHY BẠN CHỌN */}
             <div className={`absolute bottom-3 transition-all duration-300 z-30 flex flex-col items-center ${isMoving ? "scale-125 -translate-y-5" : "animate-bounce"}`}>
               <div className="absolute -bottom-1 flex gap-1.5 opacity-80">
                 <span className="w-2.5 h-1.5 bg-white/80 rounded-full animate-ping"></span>
@@ -543,12 +548,9 @@ function WordAdventureGame({ vocabList, saveScore }) {
                 />
               </div>
             </div>
-
           </div>
-
         </div>
 
-        {/* ================= FOOTER PROGRESS BAR ================= */}
         <div className="bg-slate-950 px-4 py-3 flex items-center justify-between border-t border-slate-800 z-40">
           <span className="text-amber-400 text-lg">⭐</span>
           <div className="flex-1 mx-3 h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
@@ -559,7 +561,6 @@ function WordAdventureGame({ vocabList, saveScore }) {
             <span>🏁</span>
           </div>
         </div>
-
       </div>
     </>
   );
